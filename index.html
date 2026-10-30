@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personalized Birthday Song Generator</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        h1 {
+            color: #e91e63;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: calc(100% - 22px);
+            font-size: 16px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #lyricsOutput {
+            margin-top: 25px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #007bff;
+            min-height: 120px; /* Reserve space for lyrics */
+            line-height: 1.5;
+        }
+        .note-highlight {
+            color: #e91e63;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Kişiye Özel Doğum Günü Şarkısı Oluşturucu</h1>
+        <p>Doğum günü sahibinin adını girin:</p>
+        <input type="text" id="nameInput" placeholder="Örn: Ayşe" value="Ayşe">
+        <button id="playButton">Şarkıyı Oluştur ve Çal</button>
+        <div id="lyricsOutput"></div>
+    </div>
+
+    <script>
+        let audioContext;
+        let oscillator;
+        let gainNode;
+        let currentTimeout;
+
+        // Frequencies for notes (simplified, C4 as base)
+        // This mapping allows us to represent musical notes as frequencies.
+        const noteFrequencies = {
+            'C4': 261.63, 'D4': 293.66, 'E4': 329.63, 'F4': 349.23, 'G4': 392.00, 'A4': 440.00, 'B4': 493.88,
+            'C5': 523.25, 'D5': 587.33, 'E5': 659.25, 'F5': 698.46, 'G5': 783.99
+        };
+
+        // Happy Birthday melody (note, duration in beats)
+        // Each object represents a musical note to be played.
+        const happyBirthdayMelody = [
+            { note: 'G4', duration: 0.5 }, { note: 'G4', duration: 0.5 }, { note: 'A4', duration: 1 }, { note: 'G4', duration: 1 }, { note: 'C5', duration: 1 }, { note: 'B4', duration: 1 }, // Happy birthday to you
+            { note: 'G4', duration: 0.5 }, { note: 'G4', duration: 0.5 }, { note: 'A4', duration: 1 }, { note: 'G4', duration: 1 }, { note: 'D5', duration: 1 }, { note: 'C5', duration: 1 }, // Happy birthday to you
+            { note: 'G4', duration: 0.5 }, { note: 'G4', duration: 0.5 }, { note: 'G5', duration: 1 }, { note: 'E5', duration: 1 }, { note: 'C5', duration: 1 }, { note: 'B4', duration: 1 }, { note: 'A4', duration: 1 }, // Happy birthday dear [Name]
+            { note: 'F5', duration: 0.5 }, { note: 'F5', duration: 0.5 }, { note: 'E5', duration: 1 }, { note: 'C5', duration: 1 }, { note: 'D5', duration: 1 }, { note: 'C5', duration: 2 }  // Happy birthday to you
+        ];
+
+        // Lyrics corresponding to the melody segments
+        const happyBirthdayLyricsSegments = [
+            "Happy birthday to you!",
+            "Happy birthday to you!",
+            "Happy birthday dear ", // Name will be inserted here
+            "Happy birthday to you!"
+        ];
+        const segmentLengths = [6, 6, 7, 6]; // Number of notes in each lyric segment
+
+        const beatDuration = 300; // milliseconds per beat (tempo)
+
+        document.getElementById('playButton').addEventListener('click', () => {
+            const name = document.getElementById('nameInput').value.trim();
+            if (!name) {
+                alert('Lütfen bir isim girin!');
+                return;
+            }
+
+            // Initialize AudioContext on user interaction
+            // This is crucial for browser autoplay policies.
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                gainNode = audioContext.createGain();
+                gainNode.connect(audioContext.destination);
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime); // Start silent
+            }
+
+            // Stop any currently playing song
+            if (currentTimeout) {
+                clearTimeout(currentTimeout);
+            }
+            if (oscillator) {
+                oscillator.stop();
+                oscillator.disconnect();
+            }
+
+            document.getElementById('lyricsOutput').innerHTML = ''; // Clear previous lyrics
+            playSong(name);
+        });
+
+        // Function to play a single note
+        function playNote(frequency, durationMs, startTime) {
+            oscillator = audioContext.createOscillator();
+            oscillator.type = 'sine'; // Sine wave for a clean tone
+            oscillator.frequency.setValueAtTime(frequency, startTime);
+            oscillator.connect(gainNode);
+
+            gainNode.gain.setValueAtTime(0.5, startTime); // Set volume
+            // Fade out slightly before the note ends to prevent clicks and create separation.
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + durationMs / 1000); 
+
+            oscillator.start(startTime);
+            oscillator.stop(startTime + durationMs / 1000); // Stop oscillator after duration
+        }
+
+        // Main function to play the song
+        async function playSong(name) {
+            let currentTime = audioContext.currentTime;
+            let currentLyricSegmentIndex = 0;
+            const lyricsOutputDiv = document.getElementById('lyricsOutput');
+            let displayedLyrics = [];
+            let notesPlayedInCurrentSegment = 0;
+
+            // Iterate through the melody notes
+            for (let i = 0; i < happyBirthdayMelody.length; i++) {
+                const noteInfo = happyBirthdayMelody[i];
+                const frequency = noteFrequencies[noteInfo.note];
+                const durationMs = noteInfo.duration * beatDuration;
+
+                // Update lyrics display at the start of each segment
+                // The lyrics are synchronized with the melody phrases.
+                if (notesPlayedInCurrentSegment === 0) {
+                    let segmentText = happyBirthdayLyricsSegments[currentLyricSegmentIndex];
+                    if (segmentText.includes("dear ")) {
+                        segmentText = segmentText.replace("dear ", `dear <span class="note-highlight">${name}</span>`);
+                    }
+                    displayedLyrics.push(segmentText);
+                    lyricsOutputDiv.innerHTML = displayedLyrics.join('<br>');
+                }
+
+                // Play the note using the Web Audio API to generate sound.
+                playNote(frequency, durationMs * 0.9, currentTime); // Play note slightly shorter for separation
+
+                // Schedule the next note's start time.
+                currentTime += durationMs / 1000; 
+
+                notesPlayedInCurrentSegment++;
+                if (notesPlayedInCurrentSegment === segmentLengths[currentLyricSegmentIndex]) {
+                    notesPlayedInCurrentSegment = 0;
+                    currentLyricSegmentIndex++;
+                }
+
+                // Use a promise-based delay to simulate synchronous playback.
+                await new Promise(resolve => currentTimeout = setTimeout(resolve, durationMs));
+            }
+        }
+    </script>
+</body>
+</html>
